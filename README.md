@@ -113,7 +113,7 @@ BugHuntyBumpy/
 │   ├── repos/                      # gescannte Repos (gitignored)
 │   ├── repro-test/                 # Test-Rezepte
 │   └── spec-test/                  # Beispiel-bughunty.yml
-├── services/
+└── services/
     ├── pie-scanner/scan.py         # StackProfiler + SASTCluster
     ├── pie-web/app.py              # FastAPI + Jinja2 Formular
     ├── casg-api/app.py             # Submission-Gateway
