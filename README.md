@@ -114,15 +114,15 @@ BugHuntyBumpy/
 │   ├── repro-test/                 # Test-Rezepte
 │   └── spec-test/                  # Beispiel-bughunty.yml
 ├── services/
-│   ├── pie-scanner/scan.py         # StackProfiler + SASTCluster
-│   ├── pie-web/app.py              # FastAPI + Jinja2 Formular
-│   ├── casg-api/app.py             # Submission-Gateway
-│   ├── casg-api/gate.py            # Gate-Service (Business-Logik)
-│   ├── csve-broker/broker.py       # Job-Orchestrierung
-│   ├── csve-runner/runner.py       # Deterministischer Verdikt-Runner
-│   ├── csve-runner/seccomp.json    # Syscall-Whitelist
-│   └── relay-worker/worker.py      # GitHub-Badge-Stub
-└── BugFixPlan_2026-06-09.md        # Archivierte Planung
+    ├── pie-scanner/scan.py         # StackProfiler + SASTCluster
+    ├── pie-web/app.py              # FastAPI + Jinja2 Formular
+    ├── casg-api/app.py             # Submission-Gateway
+    ├── casg-api/gate.py            # Gate-Service (Business-Logik)
+    ├── csve-broker/broker.py       # Job-Orchestrierung
+    ├── csve-runner/runner.py       # Deterministischer Verdikt-Runner
+    ├── csve-runner/seccomp.json    # Syscall-Whitelist
+    └── relay-worker/worker.py      # GitHub-Badge-Stub
+
 ```
 
 ---
