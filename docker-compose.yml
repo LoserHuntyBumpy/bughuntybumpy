@@ -1,0 +1,209 @@
+name: bughuntybumpy
+
+# MVP-Grundgeruest (Blueprint v1.0 §10). csve-broker als Python-Worker
+# statt Go (MVP-Reduktion, dokumentiert in README). cert-signer/honeypot
+# via profile "full" optional.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
+  sandbox:
+    driver: bridge
+    internal: true
+  honeypot-net:
+    driver: bridge
+    internal: true
+
+volumes:
+  pg-data:
+  redis-data:
+  minio-data:
+  bughunty-spec:     # geteilte bughunty.yml zwischen scanner + web
+
+services:
+
+  # ---------- Ingress ----------
+  traefik:
+    image: traefik:v3.2
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--api.insecure=true"
+    ports:
+      - "6080:80"      # Ingress (web) -> http://localhost:6080/
+      - "6088:8080"    # Traefik-Dashboard/API
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks: [frontend]
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ---------- Layer 1: PIE ----------
+  pie-scanner:
+    build: ./services/pie-scanner
+    networks: [backend]
+    environment:
+      - DATABASE_URL=postgresql://bhb:${PG_PASSWORD}@postgres:5432/bhb
+    volumes:
+      - "./data/repos:/repos:ro"
+      - "bughunty-spec:/spec"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Oneshot-Analyse: `docker compose run --rm pie-scanner <org/repo|url|/repos/path>`
+    profiles: ["scan"]
+    restart: "no"
+    logging: *default-logging
+
+  pie-web:
+    build: ./services/pie-web
+    networks: [frontend, backend]
+    environment:
+      - SPEC_PATH=/spec/bughunty.yml
+      - CASG_API=http://casg-api:8000
+    volumes:
+      - "bughunty-spec:/spec:ro"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pie.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.pie.entrypoints=web"
+      - "traefik.http.routers.pie.priority=1"
+      - "traefik.http.services.pie.loadbalancer.server.port=8000"
+    depends_on: [casg-api]
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ---------- Layer 2: CASG ----------
+  casg-api:
+    build: ./services/casg-api
+    networks: [frontend, backend]
+    environment:
+      - DATABASE_URL=postgresql://bhb:${PG_PASSWORD}@postgres:5432/bhb
+      - REDIS_URL=redis://redis:6379/0
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.casgapi.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.casgapi.entrypoints=web"
+      - "traefik.http.routers.casgapi.priority=100"
+      - "traefik.http.services.casgapi.loadbalancer.server.port=8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ---------- Layer 3: CSVE ----------
+  csve-broker:
+    build: ./services/csve-broker
+    networks: [backend]
+    environment:
+      - DATABASE_URL=postgresql://bhb:${PG_PASSWORD}@postgres:5432/bhb
+      - REDIS_URL=redis://redis:6379/0
+      - RUNNER_IMAGE=bhb/csve-runner:latest
+      - STEP_TIMEOUT_SEC=${STEP_TIMEOUT_SEC:-120}
+      - REALTIME_TIMEBOX_SEC=${REALTIME_TIMEBOX_SEC:-600}
+    volumes:
+      # Broker provisioniert ephemere Runner -> braucht Docker-Socket.
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+  csve-runner:
+    build: ./services/csve-runner
+    image: bhb/csve-runner:latest
+    networks: [sandbox, honeypot-net]
+    read_only: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop: ["ALL"]
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    environment:
+      - NO_EGRESS=1
+      - STEP_TIMEOUT_SEC=${STEP_TIMEOUT_SEC:-120}
+    # Nicht dauerhaft gestartet. Broker spawnt Instanzen. Hier nur Build.
+    profiles: ["build-only"]
+    restart: "no"
+    logging: *default-logging
+
+  # ---------- Layer 5: Maintainer Relay ----------
+  relay-worker:
+    build: ./services/relay-worker
+    networks: [backend]
+    environment:
+      - DATABASE_URL=postgresql://bhb:${PG_PASSWORD}@postgres:5432/bhb
+      - REDIS_URL=redis://redis:6379/0
+      - GITHUB_APP_ID=${GITHUB_APP_ID:-000000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ---------- Daten-Backbone ----------
+  postgres:
+    image: postgres:16-alpine
+    networks: [backend]
+    environment:
+      - POSTGRES_USER=bhb
+      - POSTGRES_PASSWORD=${PG_PASSWORD}
+      - POSTGRES_DB=bhb
+    volumes:
+      - "pg-data:/var/lib/postgresql/data"
+      - "./db/init:/docker-entrypoint-initdb.d:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bhb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    networks: [backend]
+    volumes:
+      - "redis-data:/data"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+
+  minio:
+    image: minio/minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    networks: [backend]
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+    volumes:
+      - "minio-data:/data"
+    profiles: ["full"]
+    restart: unless-stopped
+    logging: *default-logging

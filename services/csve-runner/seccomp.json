@@ -1,0 +1,24 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "comment": "BHB Closed-Shell seccomp-Profil. Whitelist fuer Python-Runner. Phase-2: eBPF/Falco-Observation ergaenzt. Erweitern bei Build-Bedarf.",
+  "architectures": ["SCMP_ARCH_X86_64", "SCMP_ARCH_X86", "SCMP_ARCH_AARCH64"],
+  "syscalls": [
+    {
+      "names": [
+        "access", "arch_prctl", "brk", "clock_gettime", "clone", "close",
+        "dup", "dup2", "dup3", "epoll_create1", "epoll_ctl", "epoll_pwait",
+        "execve", "exit", "exit_group", "fcntl", "fstat", "fstatfs",
+        "futex", "getcwd", "getdents64", "getegid", "geteuid", "getgid",
+        "getpid", "getppid", "getrandom", "getrlimit", "gettid",
+        "gettimeofday", "getuid", "ioctl", "lseek", "lstat", "madvise",
+        "mmap", "mprotect", "munmap", "nanosleep", "newfstatat", "open",
+        "openat", "pipe", "pipe2", "poll", "ppoll", "prctl", "pread64",
+        "pselect6", "read", "readlink", "readlinkat", "rseq", "rt_sigaction",
+        "rt_sigprocmask", "rt_sigreturn", "sched_getaffinity",
+        "sched_yield", "set_robust_list", "set_tid_address", "sigaltstack",
+        "stat", "statx", "sysinfo", "uname", "wait4", "write"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}

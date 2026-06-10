@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BugHuntyBumpy - Bug-Einreichung: {{ spec.project_id }}</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px;
+         margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 1.8rem;
+       border-bottom: 1px solid #ddd; padding-bottom: .3rem; }
+  fieldset { border: 1px solid #ccc; border-radius: 6px; margin: 1rem 0;
+             padding: 1rem; }
+  label { display: block; margin: .6rem 0 .2rem; font-weight: 600; }
+  input[type=text], textarea, select { width: 100%; padding: .5rem;
+         border: 1px solid #bbb; border-radius: 4px; box-sizing: border-box;
+         font: inherit; }
+  textarea { min-height: 60px; }
+  .check { font-weight: 400; display: flex; gap: .5rem; align-items: start;
+           margin: .4rem 0; }
+  .check input { margin-top: .25rem; }
+  .meta { color: #666; font-size: .85rem; }
+  .step { border-left: 3px solid #4a90d9; padding-left: .8rem;
+          margin: .8rem 0; }
+  button { background: #2563eb; color: #fff; border: 0; padding: .7rem 1.4rem;
+           border-radius: 5px; font-size: 1rem; cursor: pointer; }
+  button.add { background: #555; padding: .4rem .9rem; font-size: .85rem; }
+  #result { margin-top: 1rem; padding: 1rem; border-radius: 5px;
+            display: none; white-space: pre-wrap; font-family: monospace; }
+  .tag { display: inline-block; background: #eef; border: 1px solid #ccd;
+         border-radius: 3px; padding: .1rem .4rem; font-size: .8rem;
+         margin: 0 .2rem .2rem 0; }
+</style>
+</head>
+<body>
+<h1>Bug-Einreichung &middot; <code>{{ spec.project_id }}</code></h1>
+<p class="meta">
+  Erkannt:
+  {% for l in spec.detected.languages %}<span class="tag">{{ l }}</span>{% endfor %}
+  {% for f in spec.detected.frameworks %}<span class="tag">{{ f }}</span>{% endfor %}
+  {% for d in spec.detected.databases %}<span class="tag">db:{{ d }}</span>{% endfor %}
+  &middot; Repro-Default-Klasse: <b>{{ spec.reproducibility_default }}</b>
+</p>
+<p class="meta">Langes Formular ist Absicht. Es filtert Zero-Effort-Meldungen.</p>
+
+<form id="bhb">
+
+<fieldset>
+  <h2>1. Verhaltenskodex (Pflicht)</h2>
+  <label class="check"><input type="checkbox" class="code" required>
+    Ich habe bestehende Issues und Doku durchsucht.</label>
+  <label class="check"><input type="checkbox" class="code" required>
+    Maintainer pflegen dieses Projekt mit begrenzten Ressourcen.</label>
+  <label class="check"><input type="checkbox" class="code" required>
+    Ich beschreibe ein Problem, stelle keine Forderung.</label>
+  <label class="check"><input type="checkbox" class="code" required>
+    Ich habe in frischer Umgebung reproduziert.</label>
+</fieldset>
+
+<fieldset>
+  <h2>2. Umgebungs-Archaeologie</h2>
+  <label>Commit-Hash (Pflicht)</label>
+  <input type="text" id="commit" value="{{ spec.commit_default }}" required>
+  <label>Runtime</label>
+  <select id="runtime">
+    {% for r in spec.required_environment.runtime %}
+    <option value="{{ r }}">{{ r }}</option>{% endfor %}
+  </select>
+  <label>Umgebungs-Outputs (docker/node/uname, sanitisiert)</label>
+  <textarea id="env_output" placeholder="$ docker --version&#10;..."></textarea>
+</fieldset>
+
+<fieldset>
+  <h2>3. Bug-Klassifizierung</h2>
+  <label>Klasse (nur projekt-relevante Optionen)</label>
+  <select id="bug_class" required>
+    <optgroup label="Tier 1 - deterministisch">
+    {% for t in spec.tiers.tier1_deterministic %}
+      <option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </optgroup>
+    <optgroup label="Tier 2 - stochastisch">
+    {% for t in spec.tiers.tier2_stochastic %}
+      <option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </optgroup>
+    <optgroup label="Tier 3 - manuell">
+    {% for t in spec.tiers.tier3_manual %}
+      <option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </optgroup>
+  </select>
+</fieldset>
+
+<fieldset>
+  <h2>4. Reframe-Editor (Zwangsbausteine, kein Freitext)</h2>
+  <label>Kontext: Ich nutze [Projekt] v[X] unter [OS].</label>
+  <input type="text" id="rf_context" required>
+  <label>Erwartung: Ich erwartete, dass...</label>
+  <textarea id="rf_expect" required></textarea>
+  <label>Realitaet: Stattdessen passierte...</label>
+  <textarea id="rf_reality" required></textarea>
+  <label>Selbstversuch: Um zu isolieren, habe ich bereits... (Pflicht)</label>
+  <textarea id="rf_selftest" required></textarea>
+  <label>Loesungsrichtung (optional)</label>
+  <textarea id="rf_solution"></textarea>
+</fieldset>
+
+<fieldset>
+  <h2>5. Reproduktions-Rezept (erzeugt repro.yml)</h2>
+  <p class="meta">Pro Schritt: Befehl, erwarteter Exit-Code, erwartetes
+     Output-Fragment. Wird deterministisch im Closed-Shell-Runner abgespielt.</p>
+  <div id="steps"></div>
+  <button type="button" class="add" onclick="addStep()">+ Schritt</button>
+</fieldset>
+
+{% if spec.proof_of_context %}
+<fieldset>
+  <h2>6. Proof-of-Context (maschinell pruefbar)</h2>
+  {% for p in spec.proof_of_context %}
+  <label>{{ p.q }}</label>
+  <input type="text" class="poc" data-q="{{ p.q }}" required>
+  {% endfor %}
+</fieldset>
+{% endif %}
+
+<button type="submit">Einreichen</button>
+</form>
+<div id="result"></div>
+
+<script>
+const SPEC = {{ spec | tojson }};
+function addStep(){
+  const i = document.querySelectorAll('.step').length;
+  const d = document.createElement('div');
+  d.className = 'step';
+  d.innerHTML =
+    '<label>Befehl</label><input type="text" class="s-run" '
+    + 'placeholder="docker build -t target ." required>'
+    + '<label>Erwarteter Exit-Code</label><input type="text" '
+    + 'class="s-exit" value="0">'
+    + '<label>Erwartetes Output-Fragment (optional)</label>'
+    + '<input type="text" class="s-out" placeholder="1247 rows">';
+  document.getElementById('steps').appendChild(d);
+}
+addStep();
+
+document.getElementById('bhb').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (![...document.querySelectorAll('.code')].every(c => c.checked)) {
+    alert('Verhaltenskodex unvollstaendig.'); return;
+  }
+  const steps = [...document.querySelectorAll('.step')].map(s => {
+    const ex = s.querySelector('.s-exit').value.trim();
+    const out = s.querySelector('.s-out').value.trim();
+    const o = { run: s.querySelector('.s-run').value };
+    if (ex !== '') o.expect_exit = parseInt(ex, 10);
+    if (out !== '') o.expect_output = out;
+    return o;
+  }).filter(s => s.run);
+  const poc = {};
+  document.querySelectorAll('.poc').forEach(p => poc[p.dataset.q] = p.value);
+  const payload = {
+    project_id: SPEC.project_id,
+    commit: document.getElementById('commit').value,
+    runtime: document.getElementById('runtime').value,
+    env_output: document.getElementById('env_output').value,
+    bug_class: document.getElementById('bug_class').value,
+    reframe: {
+      context: rf('rf_context'), expectation: rf('rf_expect'),
+      reality: rf('rf_reality'), selftest: rf('rf_selftest'),
+      solution: rf('rf_solution'),
+    },
+    repro: { commit: document.getElementById('commit').value, steps },
+    proof_of_context: poc,
+  };
+  const res = document.getElementById('result');
+  res.style.display = 'block';
+  res.textContent = 'sende...';
+  try {
+    const r = await fetch('/submit', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json();
+    res.style.background = r.ok ? '#e7f6e7' : '#fdecec';
+    res.textContent = JSON.stringify(j, null, 2);
+  } catch (err) {
+    res.style.background = '#fdecec';
+    res.textContent = 'Fehler: ' + err;
+  }
+});
+function rf(id){ return document.getElementById(id).value; }
+</script>
+</body>
+</html>
