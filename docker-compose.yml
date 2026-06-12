@@ -1,6 +1,6 @@
 name: bughuntybumpy
 
-# MVP-Grundgeruest (Blueprint v1.0 §10). csve-broker als Python-Worker
+# MVP-Grundgerüst (Blueprint v1.0 §10). csve-broker als Python-Worker
 # statt Go (MVP-Reduktion, dokumentiert in README). cert-signer/honeypot
 # via profile "full" optional.
 
