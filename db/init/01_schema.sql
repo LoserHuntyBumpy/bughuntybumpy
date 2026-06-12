@@ -1,4 +1,4 @@
--- BHB DB-Schema (Blueprint 6). Idempotent fuer Re-Init.
+-- BHB DB-Schema (Blueprint 6). Idempotent für Re-Init.
 
 CREATE TABLE IF NOT EXISTS projects (
     id           TEXT PRIMARY KEY,         -- org/repo
