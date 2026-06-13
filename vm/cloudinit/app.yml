@@ -1,0 +1,19 @@
+#cloud-config
+# First-Boot vm-app: pie-web, casg-api, relay-worker. Nur svc-switch (kein ext).
+hostname: vm-app
+manage_etc_hosts: true
+users:
+  - name: bhb
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_pubkey}
+write_files:
+  - path: /etc/netplan/60-bhb.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          eth0: {addresses: [10.20.0.10/24]}   # casg-api 8000
+          # pie-web 8080, relay-worker (kein Port) auf gleicher VM
+runcmd:
+  - netplan apply

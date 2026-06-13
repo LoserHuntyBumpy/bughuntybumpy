@@ -113,3 +113,40 @@ redis-Queues realtime/verdicts. End-to-End blockiert nur durch BUG-2 (umgangen) 
 - [x] CHANGELOG korrigiert (nicht Behoben vor Verifikation)
       path:   claude:review-fix
       result: Sektion "In Arbeit / Behoben (Code + teilweise verifiziert)"
+
+---
+
+## VM-Alternative (UMSETZUNGSPLAN_VM-Alternative_2026-06-12 v1.1)
+
+Code-Generierung lokal (CLAUDE.md §5.8: Quellcode bleibt Claude).
+
+- [x] Phase 0 — gitignore + vm/-Geruest
+      path:   claude:scaffold
+      result: .gitignore um vhdx/qcow2/seed.iso/tf-state ergaenzt. vm/{packer,cloudinit,terraform,ansible,scripts} angelegt
+- [x] Phase 3a — Broker-Entkopplung (verhaltenserhaltend Docker)
+      path:   claude:refactor-regression-safe
+      result: runner_driver.py (Interface+Factory), docker_driver.py (lazy import docker, run_job/ensure_networks/_parse_verdict 1:1), broker.py ohne docker-Modul-Import, Dispatch RUNNER_BACKEND, check_combo gesperrte Kombi
+- [x] Phase 3a — Regressionstest Docker-Pfad
+      path:   claude:pytest
+      result: test_broker.py broker-seitig + test_docker_driver.py driver-seitig. Assertions erhalten. 20 broker-tests passed
+- [x] Phase 3b — vm_driver (hyperv|libvirt)
+      path:   claude:feature
+      result: spawn() Seed-ISO+Lifecycle-Skript+Verdikt-Datei+try/finally cleanup, sweep_orphans. test_vm_driver.py: spawn/timeout/error/no-verdict/parse-error/bad-backend
+- [x] Phase 1 — Packer Golden+5 Rollen
+      path:   claude:infra-scaffold
+      result: base-debian12 (hyperv-iso+qemu, snapshot-pin), role-ingress/app/data/broker/runner (vmcx/backing-clone). IMAGES.lock-Platzhalter
+- [x] Phase 2 — cloud-init + Terraform + Ansible
+      path:   claude:infra-scaffold
+      result: cloudinit 5 (runner: read-only-root/tmpfs/kein-routing). terraform main/variables/outputs (profile-Gate hyperv|libvirt). ansible site.yml (data/app/broker systemd+venv, schema-init)
+- [x] Phase 2/5 — Lifecycle-Skripte
+      path:   claude:shell
+      result: 010_build/020_provision/030_destroy, runner_spawn.ps1 (Results-VHDX-Rueckkanal), runner_spawn.sh (virtio-serial), orphan_sweep.ps1/sh, 040_airgap_verify.sh
+- [x] Phase 4 — Airgap-Verifikation (Skript)
+      path:   claude:shell
+      result: 040_airgap_verify.sh: ICMP/DNS/HTTP/Default-Route/Lateral muessen scheitern, exit!=0 bei Leak. Reale Ausfuehrung braucht Runner-VM
+- [x] Phase 5 — Doku-Trias
+      path:   claude:doku
+      result: BLUEPRINT_VM-Infrastruktur.md neu, README VM-Sektion+Struktur+Testzahl, CHANGELOG 0.3.0. Dockerfile Treiber-Module ergaenzt
+- [x] Gesamttest
+      path:   claude:pytest
+      result: casg-api+pie-scanner+csve-broker 29 passed. Akzeptanz 5+6 verifiziert; 1-4 brauchen Hyper-V/Packer/TF-Toolchain (Phase 0)

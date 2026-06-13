@@ -2,50 +2,51 @@
 """BHB Layer-3 csve-broker - Job-Consumer + Runner-Provisionierung.
 
 MVP-Variante in Python (Blueprint sieht Go vor; MVP-Reduktion dokumentiert).
-Liest Jobs aus redis:queue:realtime, schreibt repro.yml in ephemeren
-Arbeitsordner, startet einen Closed-Shell csve-runner-Container (Netz:
-sandbox + honeypot, read-only, cap-drop, kein Egress), liest Verdikt-JSON
-von stdout, persistiert es und benachrichtigt relay-worker.
+Liest Jobs aus redis:queue:realtime, dispatcht die Sandbox-Ausfuehrung an
+einen austauschbaren Runner-Treiber (docker | vm), persistiert das Verdikt
+und benachrichtigt relay-worker.
+
+Treiber-Entkopplung (Plan 1.5 / Phase 3): broker kennt KEINE konkrete
+Sandbox-Technologie mehr. `import docker` liegt ausschliesslich im
+docker_driver (lazy). Backend-Wahl via RUNNER_BACKEND (docker|vm), Stack-Wahl
+via STACK (compose|vm). Gesperrte Kombi STACK=compose + RUNNER_BACKEND=vm
+wird beim Start hart abgewiesen (Plan 3.5).
 
 KEINE generative KI. Reine Orchestrierung.
 """
 import json
 import os
-import shutil
-import tempfile
+import sys
 import time
 
-import docker
 import psycopg2
 import redis
-import yaml
+
+from runner_driver import get_driver
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
-RUNNER_IMAGE = os.getenv("RUNNER_IMAGE", "bhb/csve-runner:latest")
-STEP_TIMEOUT = os.getenv("STEP_TIMEOUT_SEC", "120")
-TIMEBOX = int(os.getenv("REALTIME_TIMEBOX_SEC", "600"))
+RUNNER_BACKEND = os.getenv("RUNNER_BACKEND", "docker")
+STACK = os.getenv("STACK", "compose")
 QUEUE = "queue:realtime"
 PROCESSING = "queue:realtime:processing"
 NOTIFY = "queue:verdicts"
 
-SANDBOX_NET = "bughuntybumpy_sandbox"
-HONEYPOT_NET = "bughuntybumpy_honeypot-net"
-
 rds = redis.from_url(REDIS_URL)
-dcli = docker.from_env()
 
 
 def db():
     return psycopg2.connect(DATABASE_URL)
 
 
-def ensure_networks():
-    for net in (SANDBOX_NET, HONEYPOT_NET):
-        try:
-            dcli.networks.get(net)
-        except docker.errors.NotFound:
-            dcli.networks.create(net, driver="bridge", internal=True)
+def check_combo(stack, backend):
+    """Gesperrte Kombi §3.5: containerisierter Broker kann Host-Hypervisor
+    nicht treiben. Harter Abbruch statt stiller Fehlbedienung."""
+    if stack == "compose" and backend == "vm":
+        raise SystemExit(
+            "gesperrte Kombination STACK=compose + RUNNER_BACKEND=vm: "
+            "containerisierter Broker kann Host-Hypervisor nicht treiben. "
+            "Stack=vm waehlen oder RUNNER_BACKEND=docker.")
 
 
 def reclaim_processing():
@@ -66,65 +67,11 @@ def severity_for(report):
     return "P4"
 
 
-def run_job(job):
+def run_job(driver, job):
     report_id = job["report_id"]
     repro = job["repro"]
-    workdir = tempfile.mkdtemp(prefix="bhb-job-")
-    try:
-        repro_path = os.path.join(workdir, "repro.yml")
-        with open(repro_path, "w", encoding="utf-8") as fh:
-            yaml.safe_dump(repro, fh, sort_keys=False)
-
-        container = dcli.containers.run(
-            RUNNER_IMAGE,
-            command=["/repro/repro.yml"],
-            volumes={workdir: {"bind": "/repro", "mode": "ro"}},
-            network=SANDBOX_NET,
-            environment={"STEP_TIMEOUT_SEC": STEP_TIMEOUT, "NO_EGRESS": "1"},
-            read_only=True,
-            cap_drop=["ALL"],
-            security_opt=["no-new-privileges:true"],
-            pids_limit=256,
-            mem_limit="2g",
-            nano_cpus=2_000_000_000,
-            tmpfs={"/tmp": "rw,noexec,nosuid,size=512m"},
-            detach=True,
-            stdout=True, stderr=True,
-        )
-        try:
-            container.wait(timeout=TIMEBOX)
-            logs = container.logs(stdout=True, stderr=False)
-            report = _parse_verdict(logs) or {
-                "verdict": "REJECTED", "verdict_class": "none",
-                "error": "no_verdict_in_logs"}
-        except Exception:  # noqa: BLE001
-            report = {"verdict": "REJECTED", "verdict_class": "none",
-                      "error": "wait_or_log_error"}
-        finally:
-            try:
-                container.remove(force=True)
-            except Exception:
-                pass
-    except Exception as e:  # noqa: BLE001
-        report = {"verdict": "REJECTED", "verdict_class": "none",
-                  "error": str(e)}
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
-
+    report = driver.spawn(report_id, repro)
     persist_verdict(report_id, report)
-
-
-def _parse_verdict(raw):
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8", "ignore")
-    for line in reversed(raw.strip().splitlines()):
-        line = line.strip()
-        if line.startswith("{"):
-            try:
-                return json.loads(line)
-            except json.JSONDecodeError:
-                continue
-    return None
 
 
 def persist_verdict(report_id, report):
@@ -145,16 +92,20 @@ def persist_verdict(report_id, report):
 
 
 def main():
-    ensure_networks()
+    check_combo(STACK, RUNNER_BACKEND)
+    driver = get_driver(RUNNER_BACKEND)
+    driver.setup()
+    driver.sweep_orphans()
     reclaim_processing()
-    print("csve-broker up, consuming %s" % QUEUE, flush=True)
+    print("csve-broker up, backend=%s consuming %s" % (RUNNER_BACKEND, QUEUE),
+          flush=True)
     while True:
         raw = rds.blmove(QUEUE, PROCESSING, timeout=5, src="LEFT", dest="RIGHT")
         if not raw:
             continue
         try:
             job = json.loads(raw)
-            run_job(job)
+            run_job(driver, job)
         except Exception as e:  # noqa: BLE001
             print("job error: %s" % e, flush=True)
             time.sleep(1)

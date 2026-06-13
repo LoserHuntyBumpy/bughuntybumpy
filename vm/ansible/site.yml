@@ -1,0 +1,104 @@
+---
+# Service-Deploy in die Rollen-VMs (systemd-Units + python-venv).
+# Quelle: services/-Code identisch zu Docker-Variante; nur Deploy-Schicht
+# differiert (Plan §3 / Risiko Doppelpflege). DB-Init aus db/init/01_schema.sql.
+
+- name: data — postgres/redis/minio + Schema
+  hosts: data
+  become: true
+  tasks:
+    - name: schema einspielen
+      ansible.builtin.copy:
+        src: ../../db/init/01_schema.sql
+        dest: /tmp/01_schema.sql
+    - name: psql schema apply
+      ansible.builtin.shell: psql -U bhb -d bhb -f /tmp/01_schema.sql
+      args: { creates: /var/lib/bhb/.schema_applied }
+    - name: minio systemd-unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/minio.service
+        content: |
+          [Unit]
+          Description=MinIO
+          [Service]
+          ExecStart=/usr/local/bin/minio server /var/lib/minio --address 10.20.0.20:9000
+          Restart=always
+          [Install]
+          WantedBy=multi-user.target
+    - name: enable services
+      ansible.builtin.systemd: { name: "{{ item }}", enabled: true, state: started }
+      loop: [postgresql, redis-server, minio]
+
+- name: app — pie-web / casg-api / relay-worker
+  hosts: app
+  become: true
+  vars:
+    services:
+      - { name: pie-web,      dir: pie-web,      cmd: "uvicorn app:app --host 10.20.0.11 --port 8080" }
+      - { name: casg-api,     dir: casg-api,     cmd: "uvicorn app:app --host 10.20.0.10 --port 8000" }
+      - { name: relay-worker, dir: relay-worker, cmd: "python worker.py" }
+  tasks:
+    - name: code sync
+      ansible.posix.synchronize:
+        src: "../../services/{{ item.dir }}/"
+        dest: "/opt/bhb/{{ item.dir }}/"
+      loop: "{{ services }}"
+    - name: venv + deps
+      ansible.builtin.shell: |
+        python3 -m venv /opt/bhb/{{ item.dir }}/.venv
+        /opt/bhb/{{ item.dir }}/.venv/bin/pip install -r /opt/bhb/{{ item.dir }}/requirements.txt
+      args: { creates: "/opt/bhb/{{ item.dir }}/.venv" }
+      loop: "{{ services }}"
+    - name: systemd-units
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ item.name }}.service"
+        content: |
+          [Unit]
+          Description=BHB {{ item.name }}
+          After=network.target
+          [Service]
+          WorkingDirectory=/opt/bhb/{{ item.dir }}
+          EnvironmentFile=/etc/bhb/app.env
+          ExecStart=/opt/bhb/{{ item.dir }}/.venv/bin/{{ item.cmd }}
+          Restart=always
+          [Install]
+          WantedBy=multi-user.target
+      loop: "{{ services }}"
+    - name: enable app services
+      ansible.builtin.systemd: { name: "{{ item.name }}", enabled: true, state: started, daemon_reload: true }
+      loop: "{{ services }}"
+
+- name: broker — csve-broker (RUNNER_BACKEND=vm)
+  hosts: broker
+  become: true
+  tasks:
+    - name: code sync
+      ansible.posix.synchronize:
+        src: ../../services/csve-broker/
+        dest: /opt/bhb/csve-broker/
+    - name: venv + deps
+      ansible.builtin.shell: |
+        python3 -m venv /opt/bhb/csve-broker/.venv
+        /opt/bhb/csve-broker/.venv/bin/pip install -r /opt/bhb/csve-broker/requirements.txt
+      args: { creates: /opt/bhb/csve-broker/.venv }
+    - name: vm-scripts sync (runner_spawn.sh, orphan_sweep.sh)
+      ansible.posix.synchronize:
+        src: ../scripts/
+        dest: /opt/bhb/vm-scripts/
+    - name: broker systemd-unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/csve-broker.service
+        content: |
+          [Unit]
+          Description=BHB csve-broker
+          After=network.target
+          [Service]
+          WorkingDirectory=/opt/bhb/csve-broker
+          EnvironmentFile=/etc/bhb/broker.env
+          Environment=VM_SCRIPT_DIR=/opt/bhb/vm-scripts
+          ExecStart=/opt/bhb/csve-broker/.venv/bin/python broker.py
+          Restart=always
+          [Install]
+          WantedBy=multi-user.target
+    - name: enable broker
+      ansible.builtin.systemd: { name: csve-broker, enabled: true, state: started, daemon_reload: true }

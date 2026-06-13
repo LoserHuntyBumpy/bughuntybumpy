@@ -1,0 +1,32 @@
+#cloud-config
+# First-Boot vm-runner (ephemer, Linked Clone): read-only-Root, tmpfs-Overlay,
+# KEIN Default-Routing (Egress physisch unmoeglich, sandbox-switch ohne Uplink).
+# Seed-ISO (NoCloud, Label CIDATA) liefert repro.yml. systemd-Unit bhb-runner
+# fuehrt /opt/runner.py /repro/repro.yml aus, schreibt Verdikt auf Results-Disk.
+hostname: vm-runner
+manage_etc_hosts: false
+# kein users-Block mit Passwort; kein sudo zur Laufzeit (Haertung Plan §5)
+write_files:
+  - path: /etc/systemd/system/bhb-runner.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=BHB CSVE Runner (ephemeral)
+      After=local-fs.target
+      [Service]
+      Type=oneshot
+      TasksMax=256
+      ExecStartPre=/bin/mount /dev/disk/by-label/CIDATA /repro -o ro
+      ExecStartPre=/bin/mount /dev/disk/by-label/RESULTS /results
+      ExecStart=/usr/bin/python3 /opt/runner.py /repro/repro.yml > /results/verdict.json
+      ExecStopPost=/bin/sync
+      ExecStopPost=/sbin/poweroff
+      [Install]
+      WantedBy=multi-user.target
+mounts:
+  - [ tmpfs, /tmp, tmpfs, "rw,noexec,nosuid,size=512m", "0", "0" ]
+# kein runcmd mit Netzwerk; kein netplan -> kein Routing
+bootcmd:
+  - [ sh, -c, "mkdir -p /repro /results" ]
+runcmd:
+  - systemctl start bhb-runner.service

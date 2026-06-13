@@ -18,3 +18,11 @@ __pycache__/
 node_modules/
 *.log
 z_old/
+vm/output/
+*.vhdx
+*.qcow2
+seed*.iso
+*.tf-generated.ini
+.terraform/
+*.tfstate
+*.tfstate.backup

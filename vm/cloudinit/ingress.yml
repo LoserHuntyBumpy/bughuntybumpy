@@ -1,0 +1,27 @@
+#cloud-config
+# First-Boot vm-ingress: Hostname, statische IP (ext + svc), nginx-Routing.
+hostname: vm-ingress
+manage_etc_hosts: true
+users:
+  - name: bhb
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_pubkey}
+write_files:
+  - path: /etc/netplan/60-bhb.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          eth0: {dhcp4: true}                 # ext-switch (NAT, Internet)
+          eth1: {addresses: [10.20.0.2/24]}   # svc-switch (intern)
+  - path: /etc/nginx/conf.d/bhb.conf
+    content: |
+      server {
+        listen 80;
+        location /api/ { proxy_pass http://10.20.0.10:8000; }
+        location /    { proxy_pass http://10.20.0.11:8080; }
+      }
+runcmd:
+  - netplan apply
+  - systemctl restart nginx

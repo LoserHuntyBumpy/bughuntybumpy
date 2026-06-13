@@ -1,0 +1,27 @@
+#cloud-config
+# First-Boot vm-broker: csve-broker. svc-switch (Backend) + control-Pfad zu
+# Runner-VMs via Hypervisor-API. RUNNER_BACKEND=vm, STACK=vm (Plan 3.5).
+hostname: vm-broker
+manage_etc_hosts: true
+users:
+  - name: bhb
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_pubkey}
+write_files:
+  - path: /etc/netplan/60-bhb.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          eth0: {addresses: [10.20.0.30/24]}   # svc-switch (redis/postgres-Zugriff)
+  - path: /etc/bhb/broker.env
+    content: |
+      STACK=vm
+      RUNNER_BACKEND=vm
+      VM_BACKEND=libvirt
+      DATABASE_URL=postgresql://bhb@10.20.0.20/bhb
+      REDIS_URL=redis://10.20.0.20:6379/0
+      REALTIME_TIMEBOX_SEC=600
+runcmd:
+  - netplan apply

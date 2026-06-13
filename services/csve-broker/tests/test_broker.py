@@ -2,15 +2,10 @@ import pytest
 import sys
 import os
 import json
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 
-for mod in ('docker', 'psycopg2', 'redis'):
+for mod in ('psycopg2', 'redis'):
     sys.modules[mod] = MagicMock()
-
-mock_docker_mod = sys.modules['docker']
-mock_docker_errors = MagicMock()
-mock_docker_errors.NotFound = Exception
-mock_docker_mod.errors = mock_docker_errors
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x/x")
 os.environ.setdefault("REDIS_URL", "redis://x/0")
@@ -18,19 +13,8 @@ os.environ.setdefault("REDIS_URL", "redis://x/0")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import broker
 from broker import (
-    _parse_verdict, severity_for, ensure_networks,
-    reclaim_processing, persist_verdict, run_job,
-    SANDBOX_NET, HONEYPOT_NET, TIMEBOX, STEP_TIMEOUT,
+    severity_for, reclaim_processing, persist_verdict, run_job, check_combo,
 )
-
-
-def test_parse_verdict():
-    raw = b'some noise\n{"verdict": "V1"}\n'
-    assert _parse_verdict(raw)["verdict"] == "V1"
-
-
-def test_parse_verdict_empty():
-    assert _parse_verdict(b"") is None
 
 
 def test_severity_for():
@@ -38,26 +22,6 @@ def test_severity_for():
     assert severity_for({"verdict": "V2"}) == "P3"
     assert severity_for({"verdict": "REJECTED"}) == "P4"
     assert severity_for({}) == "P4"
-
-
-def test_ensure_networks_creates_missing():
-    broker.dcli.networks.get.side_effect = broker.docker.errors.NotFound("x")
-    broker.dcli.networks.create.reset_mock()
-    ensure_networks()
-    assert broker.dcli.networks.create.call_count == 2
-    calls = broker.dcli.networks.create.call_args_list
-    assert calls[0][0][0] == SANDBOX_NET
-    assert calls[1][0][0] == HONEYPOT_NET
-    # internal=True Pruefung via kwargs
-    for c in calls:
-        assert c.kwargs.get("internal") is True or c[1].get("internal") is True
-
-
-def test_ensure_networks_idempotent():
-    broker.dcli.networks.get.side_effect = None
-    broker.dcli.networks.create.reset_mock()
-    ensure_networks()
-    broker.dcli.networks.create.assert_not_called()
 
 
 def test_reclaim_processing():
@@ -80,13 +44,29 @@ def test_persist_verdict_idempotent():
         broker.db = orig_db
 
 
-def test_timebox_exceeds_step_timeout():
-    assert TIMEBOX > int(STEP_TIMEOUT)
+def test_check_combo_locked_aborts():
+    with pytest.raises(SystemExit):
+        check_combo("compose", "vm")
 
 
-@patch('broker.shutil.rmtree')
-@patch('broker.tempfile.mkdtemp', return_value='/tmp/bhb-job-xyz')
-def test_run_job_workdir_cleanup(mock_mkdtemp, mock_rmtree):
-    broker.dcli.containers.run.side_effect = Exception("docker fail")
-    run_job({"report_id": "r1", "repro": {"steps": []}})
-    mock_rmtree.assert_called_once_with('/tmp/bhb-job-xyz', ignore_errors=True)
+def test_check_combo_valid_pass():
+    # gueltige Kombis duerfen nicht abbrechen
+    assert check_combo("compose", "docker") is None
+    assert check_combo("vm", "vm") is None
+    assert check_combo("vm", "docker") is None
+
+
+def test_run_job_dispatches_to_driver_and_persists():
+    driver = MagicMock()
+    driver.spawn.return_value = {"verdict": "V1"}
+    mock_conn = MagicMock()
+    orig_db = broker.db
+    broker.db = lambda: mock_conn
+    try:
+        run_job(driver, {"report_id": "r9", "repro": {"steps": []}})
+        driver.spawn.assert_called_once_with("r9", {"steps": []})
+        # NOTIFY-Push mit korrektem Verdikt
+        pushed = broker.rds.rpush.call_args[0][1]
+        assert json.loads(pushed)["verdict"] == "V1"
+    finally:
+        broker.db = orig_db

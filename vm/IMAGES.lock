@@ -1,0 +1,12 @@
+# IMAGES.lock - Golden/Rollen-Image-Hashes (SHA-256), env_hash-Kontrakt Layer 4.
+# Wird von vm/scripts/010_build_images.ps1 nach jedem Build ueberschrieben.
+# Platzhalter bis erster Packer-Build auf diesem Host laeuft.
+#
+# Format: <rolle>  <sha256>  <dateiname>
+#
+# base-debian12  <pending-build>  base-debian12.vhdx
+# role-ingress   <pending-build>  vm-ingress.vhdx
+# role-app       <pending-build>  vm-app.vhdx
+# role-data      <pending-build>  vm-data.vhdx
+# role-broker    <pending-build>  vm-broker.vhdx
+# role-runner    <pending-build>  runner-golden.vhdx

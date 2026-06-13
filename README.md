@@ -113,16 +113,26 @@ BugHuntyBumpy/
 │   ├── repos/                      # gescannte Repos (gitignored)
 │   ├── repro-test/                 # Test-Rezepte
 │   └── spec-test/                  # Beispiel-bughunty.yml
-└── services/
-    ├── pie-scanner/scan.py         # StackProfiler + SASTCluster
-    ├── pie-web/app.py              # FastAPI + Jinja2 Formular
-    ├── casg-api/app.py             # Submission-Gateway
-    ├── casg-api/gate.py            # Gate-Service (Business-Logik)
-    ├── csve-broker/broker.py       # Job-Orchestrierung
-    ├── csve-runner/runner.py       # Deterministischer Verdikt-Runner
-    ├── csve-runner/seccomp.json    # Syscall-Whitelist
-    └── relay-worker/worker.py      # GitHub-Badge-Stub
-
+├── services/
+│   ├── pie-scanner/scan.py         # StackProfiler + SASTCluster
+│   ├── pie-web/app.py              # FastAPI + Jinja2 Formular
+│   ├── casg-api/app.py             # Submission-Gateway
+│   ├── casg-api/gate.py            # Gate-Service (Business-Logik)
+│   ├── csve-broker/broker.py       # Job-Orchestrierung + Treiber-Dispatch
+│   ├── csve-broker/runner_driver.py# Treiber-Interface + Factory (docker|vm)
+│   ├── csve-broker/docker_driver.py# Docker-Backend (lazy import docker)
+│   ├── csve-broker/vm_driver.py    # VM-Backend (hyperv|libvirt)
+│   ├── csve-runner/runner.py       # Deterministischer Verdikt-Runner
+│   ├── csve-runner/seccomp.json    # Syscall-Whitelist
+│   └── relay-worker/worker.py      # GitHub-Badge-Stub
+├── vm/                             # VM-Profil (Alternative zu Docker)
+│   ├── packer/                     # Golden Base + 5 Rollen-Images
+│   ├── cloudinit/                  # First-Boot-Provisionierung
+│   ├── terraform/                  # Switches + Rollen-VMs (hyperv|libvirt)
+│   ├── ansible/site.yml            # Service-Deploy (systemd + venv)
+│   ├── scripts/                    # build/provision/destroy/runner-lifecycle
+│   └── IMAGES.lock                 # Image-Hashes (env_hash-Kontrakt)
+└── BugFixPlan_2026-06-09.md        # Archivierte Planung
 ```
 
 ---
@@ -145,7 +155,37 @@ Siehe `BLUEPRINT_Docker-Infrastruktur.md` Sektion 12 fuer vollstaendige Checklis
 $ python -m pytest services/*/tests/ -v
 ```
 
-Aktueller Stand: 12 passed, 1 skipped (Runner-Tests erfordern Linux-Shell).
+Aktueller Stand: 29 passed (casg-api, pie-scanner, csve-broker inkl.
+docker_driver + vm_driver). Runner-Tests erfordern Linux-Shell.
+
+---
+
+## VM-Profil (Alternative zu Docker)
+
+Container ODER VM zur Laufzeit waehlbar. Docker bleibt Default. Zwei Achsen:
+
+- **Stack-Deploy** (`STACK=compose|vm`): wie laeuft der Gesamt-Stack.
+- **Runner-Backend** (`RUNNER_BACKEND=docker|vm`): wie wird Layer-3-Job ausgefuehrt.
+
+Gesperrt: `STACK=compose` + `RUNNER_BACKEND=vm` (Broker im Container kann
+Host-Hypervisor nicht treiben) — broker.py bricht beim Start hart ab.
+
+```powershell
+# Profile: dev-windows (Hyper-V) | prod-linux (KVM/libvirt)
+# 1. Golden + Rollen-Images bauen (SHA-256 -> vm/IMAGES.lock)
+vm\scripts\010_build_images.ps1 -Profile dev-windows
+# 2. Stack provisionieren (terraform apply + ansible), Health-Check
+vm\scripts\020_provision_stack.ps1 -Profile dev-windows
+# 3. Abbau
+vm\scripts\030_destroy_stack.ps1 -Profile dev-windows
+```
+
+Runner-Backend nur umschalten (Stack bleibt Docker, Broker-VM-fähig):
+`RUNNER_BACKEND=vm VM_BACKEND=hyperv` in der Broker-Env. Details:
+[BLUEPRINT_VM-Infrastruktur.md](BLUEPRINT_VM-Infrastruktur.md).
+
+Voraussetzung VM-Profil: Hyper-V (Windows) bzw. KVM/libvirt (Linux), Packer,
+Terraform, Ansible (WSL2 auf Windows). Siehe Plan Phase 0.
 
 ---
 
