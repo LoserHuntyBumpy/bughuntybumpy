@@ -26,3 +26,4 @@ seed*.iso
 .terraform/
 *.tfstate
 *.tfstate.backup
+*.ps1
