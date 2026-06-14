@@ -21,6 +21,7 @@ seed*.iso
 *.tfstate.backup
 *.ps1
 *generate_structure.*
+.pytest_cache
 *LICENSE_TODO.md
 *PROCESS_STEPS.md
 *FOLDER_STRUCTURES.md
