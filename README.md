@@ -1,5 +1,8 @@
 # BugHuntyBumpy
 
+Erstellt: 2026-06-14 | Stand: 2026-06-14
+Sprache: Deutsch (Original) | [English version](README_EN.md)
+
 Crowdsourced Bug-Bounty-Reporting-Gateway. Deterministische Verifikation ohne generative KI. 5-Layer-Architektur, Docker-Containerisierung, strikte Airgap-Sandbox fuer Closed-Shell-Replay.
 
 ---

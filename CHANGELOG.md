@@ -5,6 +5,18 @@ Alle wichtigen Aenderungen an diesem Projekt werden in dieser Datei dokumentiert
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt haelt sich an [Semantic Versioning](https://semver.org/lang/de/).
 
+## [0.3.2] - 2026-06-14
+
+### Hinzugefuegt
+- README_EN.md: englische Uebersetzung der README. Enthaelt Translation-Sync-
+  Hinweis (Stand-Datum der deutschen Quelle) zur Erkennung veralteter
+  Uebersetzung.
+- Datums-Block (Erstellt/Stand bzw. Created/Updated) direkt unter H1 in beiden
+  READMEs. Divergenz deutsch/englisch ueber Datumsvergleich sichtbar.
+
+### Geaendert
+- README.md: Sprach-Link auf README_EN.md ganz oben.
+
 ## [0.3.1] - 2026-06-14
 
 Lizenzwechsel MIT -> AGPL-3.0. Copyleft mit Netzwerk-Klausel (§13) schuetzt
