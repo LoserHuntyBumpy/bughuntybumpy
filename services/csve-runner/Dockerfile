@@ -2,6 +2,11 @@
 # Exit-Code-/Output-Assertion deterministisch. Airgap ueber sandbox-Netz.
 FROM python:3.12-slim
 
+LABEL org.opencontainers.image.title="bughuntybumpy-csve-runner" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/Nope-im-not-pro/BugHuntyBumpy" \
+      org.opencontainers.image.authors="Nope-im-not-pro <nope-im-not-pro@keemail.me>"
+
 RUN pip install --no-cache-dir pyyaml==6.0.2 \
     && useradd -m -u 10001 runner
 

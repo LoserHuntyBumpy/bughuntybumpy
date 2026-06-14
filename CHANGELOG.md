@@ -5,6 +5,29 @@ Alle wichtigen Aenderungen an diesem Projekt werden in dieser Datei dokumentiert
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt haelt sich an [Semantic Versioning](https://semver.org/lang/de/).
 
+## [0.3.1] - 2026-06-14
+
+Lizenzwechsel MIT -> AGPL-3.0. Copyleft mit Netzwerk-Klausel (§13) schuetzt
+gegen Closed-Source-Kommerzialisierung als gehosteter Dienst ohne Quellcode-
+Freigabe und ohne Attribution.
+
+### Hinzugefuegt
+- LICENSE.md: AGPL-3.0 Volltext, ausgefuellter Notice-Block
+  (Copyright 2026 Nope-im-not-pro).
+- AGPL §5a Lizenz-Header in 11 Source- + 6 Test-Modulen (services/*).
+- form.html: §13 Source-Link + Appropriate Legal Notices (Footer:
+  Copyright, AGPL-Link, Source-Link, Gewaehrleistungsausschluss).
+- LICENSE_TODO.md: Konformitaets-Checkliste.
+- OCI-Image-Labels in 6 Dockerfiles (org.opencontainers.image.title/
+  licenses=AGPL-3.0-or-later/source/authors).
+
+### Geaendert
+- README.md Lizenz-Sektion: MIT -> AGPL-3.0 inkl. Copyleft-/SaaS-Hinweis.
+
+### Verifiziert
+- pytest casg-api/pie-scanner/csve-broker: 29 passed (Header sind Kommentare,
+  keine Logik-Aenderung).
+
 ## [0.3.0] - 2026-06-13
 
 VM-Infrastruktur als waehlbare Alternative zu Docker (UMSETZUNGSPLAN_VM-Alternative
@@ -33,7 +56,7 @@ v1.1). Docker bleibt Default, regressionsfrei.
 ### Verifiziert
 - RUNNER_BACKEND=docker bit-identisch (docker_driver-Tests gruen).
 - pytest casg-api/pie-scanner/csve-broker: 29 passed.
-- Image-Build/Provisionierung/Airgap (Akzeptanz 1-4) NICHT verifiziert —
+- Image-Build/Provisionierung/Airgap (Akzeptanz 1-4) NICHT verifiziert -
   erfordern reale Hyper-V/Packer/Terraform-Toolchain (Plan Phase 0).
 
 ## [0.2.0] - 2026-06-09

@@ -1,16 +1,9 @@
-*DickeTittenKartoffelSalat_v0.3.md
-*Claude_Ultra-Alien_GlobalPolicy.md
-*BatShitCrazy_Speed-Token-RedActor.md
-*MTP-TokenGen-Cheatsheet-for-MultiClaude_v1.4.1.md
-*Minimax-Anthropic-OpenAI_LoveTriangle_Tokenizer.md
-*CaveMan+Absolut2UniCode_TranslateDirectives.md
-*RaunchyHoneyPot_EL-L-MOSS_Orchestrator.md
-*GogoNutsXL_Graphify+Markitdown_Enforcer.md
 .env
 secrets/
 letsencrypt/
 data/
 .backups/
+backups/
 __pycache__/
 *.pyc
 *.bak
@@ -27,3 +20,7 @@ seed*.iso
 *.tfstate
 *.tfstate.backup
 *.ps1
+*generate_structure.*
+*LICENSE_TODO.md
+*PROCESS_STEPS.md
+*FOLDER_STRUCTURES.md

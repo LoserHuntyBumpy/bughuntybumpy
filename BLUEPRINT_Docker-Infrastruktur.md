@@ -228,7 +228,7 @@ services:
     environment:
       - NO_EGRESS=1
       - HONEYPOT_HOST=honeypot-mock
-    # NICHT direkt gestartet — csve-broker provisioniert ephemere Instanzen.
+    # NICHT direkt gestartet - csve-broker provisioniert ephemere Instanzen.
     # Hier nur Image-Build + Default-Constraints definiert.
     profiles: ["build-only"]
     restart: "no"
@@ -344,7 +344,7 @@ services:
 ## 4. .env (Secrets-Vorlage)
 
 ```dotenv
-# .env  — NICHT committen. In .gitignore.
+# .env  - NICHT committen. In .gitignore.
 PG_PASSWORD=change-me-strong
 MINIO_ACCESS_KEY=bhbminio
 MINIO_SECRET_KEY=change-me-strong
@@ -380,7 +380,7 @@ ENTRYPOINT ["/opt/entrypoint.sh"]
 
 ```python
 #!/usr/bin/env python3
-"""CSVE Closed-Shell Runner — deterministisch, KEINE KI.
+"""CSVE Closed-Shell Runner - deterministisch, KEINE KI.
 Input: repro.yml + Ziel-Repo-Checkout (commit-pinned).
 Output: Verdikt-JSON (V1/V2/V3) → stdout, Audit-Log → /audit.
 """
@@ -462,7 +462,7 @@ steps:
 `sandbox` + `honeypot-net` sind `internal: true` → kein NAT, kein Internet. Zusaetzlich Host-Firewall-Regel als zweite Linie:
 
 ```bash
-# host-firewall.sh — beim Deploy ausfuehren. iptables-Hard-Block fuer sandbox-subnet.
+# host-firewall.sh - beim Deploy ausfuehren. iptables-Hard-Block fuer sandbox-subnet.
 SANDBOX_SUBNET=$(docker network inspect bughuntybumpy_sandbox \
   -f '{{ (index .IPAM.Config 0).Subnet }}')
 iptables -I DOCKER-USER -s "$SANDBOX_SUBNET" ! -d "$SANDBOX_SUBNET" -j DROP

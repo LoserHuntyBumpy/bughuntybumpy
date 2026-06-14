@@ -168,7 +168,7 @@ Container ODER VM zur Laufzeit waehlbar. Docker bleibt Default. Zwei Achsen:
 - **Runner-Backend** (`RUNNER_BACKEND=docker|vm`): wie wird Layer-3-Job ausgefuehrt.
 
 Gesperrt: `STACK=compose` + `RUNNER_BACKEND=vm` (Broker im Container kann
-Host-Hypervisor nicht treiben) — broker.py bricht beim Start hart ab.
+Host-Hypervisor nicht treiben) - broker.py bricht beim Start hart ab.
 
 ```powershell
 # Profile: dev-windows (Hyper-V) | prod-linux (KVM/libvirt)
@@ -197,4 +197,15 @@ Siehe [CHANGELOG.md](CHANGELOG.md)
 
 ## Lizenz
 
-MIT (bald)
+GNU Affero General Public License v3.0 (AGPL-3.0). Volltext: [LICENSE.md](LICENSE.md).
+
+Copyright (C) 2026  &lt;Nope-im-not-pro&gt; &lt;nope-im-not-pro@keemail.me&gt;
+
+Copyleft mit Netzwerk-Klausel (AGPL §13): wer BugHuntyBumpy modifiziert und
+als netzbasierten Dienst betreibt, muss den Quellcode der laufenden Version
+allen Nutzern zugaenglich machen. Kommerzielle Nutzung erlaubt, aber nur unter
+Erhalt von Lizenz, Copyright-Vermerk und Offenlegungspflicht. Closed-Source-
+Weiterverwertung ohne Quellcode-Freigabe ist eine Lizenzverletzung.
+
+SaaS-Hinweis: Eine oeffentlich erreichbare BHB-Instanz muss in der Web-UI
+einen "Source"-Link auf das Code-Archiv anbieten (AGPL §13).

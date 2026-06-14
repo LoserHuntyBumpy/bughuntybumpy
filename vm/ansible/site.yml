@@ -3,7 +3,7 @@
 # Quelle: services/-Code identisch zu Docker-Variante; nur Deploy-Schicht
 # differiert (Plan §3 / Risiko Doppelpflege). DB-Init aus db/init/01_schema.sql.
 
-- name: data — postgres/redis/minio + Schema
+- name: data - postgres/redis/minio + Schema
   hosts: data
   become: true
   tasks:
@@ -29,7 +29,7 @@
       ansible.builtin.systemd: { name: "{{ item }}", enabled: true, state: started }
       loop: [postgresql, redis-server, minio]
 
-- name: app — pie-web / casg-api / relay-worker
+- name: app - pie-web / casg-api / relay-worker
   hosts: app
   become: true
   vars:
@@ -68,7 +68,7 @@
       ansible.builtin.systemd: { name: "{{ item.name }}", enabled: true, state: started, daemon_reload: true }
       loop: "{{ services }}"
 
-- name: broker — csve-broker (RUNNER_BACKEND=vm)
+- name: broker - csve-broker (RUNNER_BACKEND=vm)
   hosts: broker
   become: true
   tasks:

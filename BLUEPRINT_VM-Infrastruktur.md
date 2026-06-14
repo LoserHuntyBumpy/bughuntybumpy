@@ -14,8 +14,8 @@ voll funktionsfaehig. Kein Ersatz, kein Bruch (Regressionsfreiheit, Plan §8/5).
 
 | Achse | Werte | Schalter |
 |---|---|---|
-| A — Stack-Deploy | `compose` (Default) \| `vm` | Provisionierungs-Skript: `docker compose up` vs. `vm/scripts/020_provision_stack.ps1` |
-| B — Runner-Backend | `docker` (Default) \| `vm` | Env `RUNNER_BACKEND` in broker.py |
+| A - Stack-Deploy | `compose` (Default) \| `vm` | Provisionierungs-Skript: `docker compose up` vs. `vm/scripts/020_provision_stack.ps1` |
+| B - Runner-Backend | `docker` (Default) \| `vm` | Env `RUNNER_BACKEND` in broker.py |
 
 Gueltige Kombinationen:
 
@@ -24,7 +24,7 @@ Gueltige Kombinationen:
 | compose | docker | Default, Ist |
 | vm | vm | reine VM-Welt |
 | vm | docker | zulaessig (Uebergang, nested) |
-| compose | vm | **gesperrt** — Abbruch in `broker.check_combo()` |
+| compose | vm | **gesperrt** - Abbruch in `broker.check_combo()` |
 
 ---
 
@@ -77,7 +77,7 @@ Haertungs-Mapping:
 |---|---|
 | read_only | Root-FS read-only (cloud-init), tmpfs-Overlay |
 | mem_limit/cpus | statische VM-Konfiguration |
-| internal: true | Switch ohne Uplink — kein Routing-Pfad |
+| internal: true | Switch ohne Uplink - kein Routing-Pfad |
 | seccomp/cap_drop | VM-Kernel-Grenze + systemd TasksMax, kein sudo |
 | Timebox 600 s | Watchdog: Stop-VM -TurnOff / virsh destroy |
 
@@ -97,7 +97,7 @@ Profile: `dev-windows` (Hyper-V), `prod-linux` (KVM/libvirt). Gleiche Pipeline.
 
 ---
 
-## 6. Akzeptanz (Plan §8) — Stand
+## 6. Akzeptanz (Plan §8) - Stand
 
 | # | Kriterium | Stand |
 |---|---|---|
