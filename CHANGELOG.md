@@ -5,6 +5,21 @@ Alle wichtigen Aenderungen an diesem Projekt werden in dieser Datei dokumentiert
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt haelt sich an [Semantic Versioning](https://semver.org/lang/de/).
 
+## [0.3.3] - 2026-06-14
+
+### Hinzugefuegt
+- Pflicht-Doku-Dateien INFRA.md, MVC.md, ERKLAERUNG.md angelegt und befuellt
+  (globale Doku-Trias §6.5).
+
+### Geaendert
+- .gitignore: `z_old/` -> `z_*`; `*.md`-Ausschluss mit Whitelist
+  (CHANGELOG/README*/LICENSE/BLUEPRINT). Interne Doku (INFRA/MVC/ERKLAERUNG,
+  Plaene, Konzepte, TODOs) bleibt lokal, nicht auf GitHub.
+
+### Verifiziert
+- git check-ignore: INFRA/MVC/ERKLAERUNG/LICENSE_TODO ignoriert;
+  README/README_EN/CHANGELOG/LICENSE/BLUEPRINT nicht ignoriert.
+
 ## [0.3.2] - 2026-06-14
 
 ### Hinzugefuegt

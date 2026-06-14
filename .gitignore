@@ -10,7 +10,7 @@ __pycache__/
 .venv/
 node_modules/
 *.log
-z_old/
+z_*
 vm/output/
 *.vhdx
 *.qcow2
@@ -22,6 +22,9 @@ seed*.iso
 *.ps1
 *generate_structure.*
 .pytest_cache
-*LICENSE_TODO.md
-*PROCESS_STEPS.md
-*FOLDER_STRUCTURES.md
+*.md
+!CHANGELOG.md
+!README*.md
+!LICENSE.md
+!BLUEPRINT*.md
+!INFRA.md
