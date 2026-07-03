@@ -1,6 +1,6 @@
 # BugHuntyBumpy
 
-Erstellt: 2026-06-14 | Stand: 2026-06-14
+Erstellt: 2026-06-14 | Stand: 2026-07-03
 Sprache: Deutsch (Original) | [English version](README_EN.md)
 
 Crowdsourced Bug-Bounty-Reporting-Gateway. Deterministische Verifikation ohne generative KI. 5-Layer-Architektur, Docker-Containerisierung, strikte Airgap-Sandbox fuer Closed-Shell-Replay.
@@ -28,7 +28,7 @@ Layer 4  Trust  cert-signer: Ed25519-Validation-Certificate (MVP optional)
 Layer 5  Relay  relay-worker: Verdikt -> GitHub-Label (bhb-verified, ...)
 ```
 
-Netz-Trennung: frontend (traefik) / backend (internal) / sandbox (internal, kein Egress) / honeypot-net (Mock-Services).
+Netz-Trennung: frontend (traefik) / backend (internal) / sandbox (internal, kein Egress). Pro Job zusaetzlich ephemeres internes Netz `bhb-job-<id>`.
 
 ---
 
@@ -135,7 +135,7 @@ BugHuntyBumpy/
 │   ├── ansible/site.yml            # Service-Deploy (systemd + venv)
 │   ├── scripts/                    # build/provision/destroy/runner-lifecycle
 │   └── IMAGES.lock                 # Image-Hashes (env_hash-Kontrakt)
-└── BugFixPlan_2026-06-09.md        # Archivierte Planung
+└── FixPlan_2026-06-25.md           # Archivierte Planung
 ```
 
 ---
@@ -158,8 +158,9 @@ Siehe `BLUEPRINT_Docker-Infrastruktur.md` Sektion 12 fuer vollstaendige Checklis
 $ python -m pytest services/*/tests/ -v
 ```
 
-Aktueller Stand: 29 passed (casg-api, pie-scanner, csve-broker inkl.
-docker_driver + vm_driver). Runner-Tests erfordern Linux-Shell.
+Aktueller Stand: 51 passed (casg-api inkl. throttle, pie-scanner, csve-broker
+inkl. docker_driver + vm_driver). Runner-Tests erfordern Linux-Shell
+(Modul-Skip auf win32).
 
 ---
 

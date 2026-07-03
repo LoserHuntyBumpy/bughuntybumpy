@@ -24,13 +24,16 @@ Gate-Pruefung in gate.py (Service-Layer).
 import json
 import os
 import uuid
+from contextlib import closing
 
 import psycopg2
 import redis
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import gate
+import throttle
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
@@ -72,15 +75,19 @@ def db():
 def health():
     try:
         rds.ping()
-        with db():
+        with closing(db()):
             pass
         return {"ok": True}
     except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": str(e)}
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=503)
 
 
 @app.post("/api/submit")
-def submit(s: Submission):
+def submit(s: Submission, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    if not throttle.check_quota(rds, "submit:%s" % client_ip, 30):
+        return JSONResponse({"status": "rate_limited"}, status_code=429)
+
     checks = gate.validate(s.model_dump())
     if checks["reject"]:
         return {"status": "rejected", "reasons": checks["reasons"]}
@@ -90,7 +97,7 @@ def submit(s: Submission):
     repro_hash = gate.repro_hash(s.repro.model_dump())
     report_id = str(uuid.uuid4())
 
-    with db() as conn, conn.cursor() as cur:
+    with closing(db()) as conn, conn, conn.cursor() as cur:
         # project_id muss existieren (FK). Bei fehlendem PIE-Run weich anlegen.
         cur.execute("INSERT INTO projects (id, bughunty_yml) VALUES (%s, %s) "
                     "ON CONFLICT (id) DO NOTHING",
@@ -117,6 +124,6 @@ def submit(s: Submission):
 
 
 def _set_status(report_id, status):
-    with db() as conn, conn.cursor() as cur:
+    with closing(db()) as conn, conn, conn.cursor() as cur:
         cur.execute("UPDATE reports SET status=%s WHERE id=%s",
                     (status, report_id))

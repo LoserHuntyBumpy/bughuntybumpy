@@ -30,6 +30,8 @@ import time
 import yaml
 
 STEP_TIMEOUT = int(os.getenv("STEP_TIMEOUT_SEC", "120"))
+MAX_STEPS = int(os.getenv("MAX_STEPS", "50"))
+REALTIME_TIMEBOX_SEC = int(os.getenv("REALTIME_TIMEBOX_SEC", "600"))
 
 
 def run_step(cmd, expect_exit=None, expect_substr=None):
@@ -61,10 +63,22 @@ def main(repro_path):
         spec = yaml.safe_load(f)
 
     results, verified = [], True
+    error = None
     steps = spec.get("steps", [])
     if not steps:
         verified = False
+
+    if len(steps) > MAX_STEPS:
+        verified = False
+        error = "max_steps"
+        steps = []
+
+    t_start = time.time()
     for step in steps:
+        if time.time() - t_start > REALTIME_TIMEBOX_SEC:
+            verified = False
+            error = "timebox_exceeded"
+            break
         r = run_step(step.get("run", "true"),
                      expect_exit=step.get("expect_exit"),
                      expect_substr=step.get("expect_output"))
@@ -72,15 +86,23 @@ def main(repro_path):
         if not r["matched"]:
             verified = False
             break
+        if time.time() - t_start > REALTIME_TIMEBOX_SEC:
+            verified = False
+            error = "timebox_exceeded"
+            break
+
+    with open(repro_path, "rb") as fh:
+        repro_hash = hashlib.sha256(fh.read()).hexdigest()
 
     report = {
         "verdict": "V1" if verified else "REJECTED",
         "verdict_class": "deterministic" if verified else "none",
         "steps": results,
-        "repro_hash": hashlib.sha256(
-            open(repro_path, "rb").read()).hexdigest(),
-        "step_count": len(steps),
+        "repro_hash": repro_hash,
+        "step_count": len(spec.get("steps", [])),
     }
+    if error is not None:
+        report["error"] = error
     sys.stdout.write(json.dumps(report) + "\n")
     sys.stdout.flush()
     return 0 if verified else 1

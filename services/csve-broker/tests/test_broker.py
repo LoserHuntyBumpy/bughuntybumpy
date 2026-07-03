@@ -18,7 +18,7 @@ import pytest
 import sys
 import os
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 for mod in ('psycopg2', 'redis'):
     sys.modules[mod] = MagicMock()
@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import broker
 from broker import (
     severity_for, reclaim_processing, persist_verdict, run_job, check_combo,
+    main, DEAD,
 )
 
 
@@ -53,7 +54,9 @@ def test_persist_verdict_idempotent():
     broker.db = lambda: mock_conn
     try:
         persist_verdict("r1", {"verdict": "V1"})
-        cur = mock_conn.__enter__.return_value.cursor.return_value.__enter__.return_value
+        # closing(db()) -> conn direkt; conn als Transaktions-CM -> __enter__;
+        # conn.cursor() als CM -> __enter__.
+        cur = mock_conn.cursor.return_value.__enter__.return_value
         sql = cur.execute.call_args_list[0][0][0]
         assert "ON CONFLICT" in sql
     finally:
@@ -86,3 +89,19 @@ def test_run_job_dispatches_to_driver_and_persists():
         assert json.loads(pushed)["verdict"] == "V1"
     finally:
         broker.db = orig_db
+
+
+@patch('broker.get_driver')
+def test_main_malformed_job_to_dead_letter(mock_get_driver):
+    # F10: malformed Job (kein valides JSON) -> Dead-Letter statt Verlust.
+    broker.rds.reset_mock()
+    broker.rds.rpoplpush.return_value = None  # reclaim_processing terminiert
+    broker.rds.rpoplpush.side_effect = None
+    # erster blmove liefert malformed raw, zweiter bricht Loop ab
+    broker.rds.blmove.side_effect = [b'not-json', KeyboardInterrupt()]
+    with pytest.raises(KeyboardInterrupt):
+        main()
+    # raw landete in Dead-Letter ...
+    broker.rds.rpush.assert_any_call(DEAD, b'not-json')
+    # ... und wurde aus PROCESSING entfernt.
+    broker.rds.lrem.assert_any_call("queue:realtime:processing", 0, b'not-json')

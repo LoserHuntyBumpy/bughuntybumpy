@@ -1,0 +1,21 @@
+# BugHuntyBumpy - systemd-Unit fuer Boot-Start des Compose-Stacks.
+# Installation:
+#   sudo cp deploy/bhb.service /etc/systemd/system/bhb.service
+#   sudo sed -i 's|/opt/BugHuntyBumpy|<REPO-PFAD>|g' /etc/systemd/system/bhb.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now bhb
+[Unit]
+Description=BugHuntyBumpy Compose-Stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/BugHuntyBumpy
+ExecStart=/usr/bin/docker compose up -d postgres redis traefik pie-web casg-api csve-broker relay-worker
+ExecStop=/usr/bin/docker compose stop
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

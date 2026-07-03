@@ -20,6 +20,8 @@ seed*.iso
 *.tfstate
 *.tfstate.backup
 *.ps1
+!vm/scripts/*.ps1
+*_token.json
 *generate_structure.*
 .pytest_cache
 *.md
@@ -27,4 +29,3 @@ seed*.iso
 !README*.md
 !LICENSE.md
 !BLUEPRINT*.md
-!INFRA.md

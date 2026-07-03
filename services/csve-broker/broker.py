@@ -33,6 +33,7 @@ import json
 import os
 import sys
 import time
+from contextlib import closing
 
 import psycopg2
 import redis
@@ -45,6 +46,7 @@ RUNNER_BACKEND = os.getenv("RUNNER_BACKEND", "docker")
 STACK = os.getenv("STACK", "compose")
 QUEUE = "queue:realtime"
 PROCESSING = "queue:realtime:processing"
+DEAD = "queue:realtime:dead"
 NOTIFY = "queue:verdicts"
 
 rds = redis.from_url(REDIS_URL)
@@ -74,6 +76,8 @@ def reclaim_processing():
 
 
 def severity_for(report):
+    # V2/V3 reserviert (Phase-2 Tier-B): Runner emittiert real nur V1/REJECTED.
+    # V2-Mapping bleibt vorhanden, Tier-B-Logik noch nicht aktiv.
     cls = report.get("verdict")
     if cls == "V1":
         return "P1"
@@ -92,7 +96,7 @@ def run_job(driver, job):
 def persist_verdict(report_id, report):
     verdict = report.get("verdict", "REJECTED")
     sev = severity_for(report)
-    with db() as conn, conn.cursor() as cur:
+    with closing(db()) as conn, conn, conn.cursor() as cur:
         cur.execute(
             "INSERT INTO verdicts (report_id, verdict, severity, detail) "
             "VALUES (%s,%s,%s,%s) "
@@ -122,7 +126,14 @@ def main():
             job = json.loads(raw)
             run_job(driver, job)
         except Exception as e:  # noqa: BLE001
-            print("job error: %s" % e, flush=True)
+            rid = "?"
+            try:
+                rid = json.loads(raw).get("report_id", "?")
+            except Exception:  # noqa: BLE001
+                pass
+            print("job error (dead-letter) report=%s: %s" % (rid, e),
+                  flush=True)
+            rds.rpush(DEAD, raw)
             time.sleep(1)
         finally:
             rds.lrem(PROCESSING, 0, raw)

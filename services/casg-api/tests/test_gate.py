@@ -54,6 +54,30 @@ def test_tone_neutral():
     assert result["tone_tag"] == "neutral"
 
 
+def test_unknown_bug_class_rejected():
+    sub = {"reframe": {"selftest": "x", "reality": "y", "expectation": "z"},
+           "commit": "abc123", "bug_class": "foo"}
+    result = validate(sub)
+    assert result["reject"] is True
+    assert "unknown_bug_class" in result["reasons"]
+
+
+def test_empty_bug_class_rejected():
+    sub = {"reframe": {"selftest": "x", "reality": "y", "expectation": "z"},
+           "commit": "abc123", "bug_class": ""}
+    result = validate(sub)
+    assert result["reject"] is True
+    assert "unknown_bug_class" in result["reasons"]
+
+
+def test_known_bug_class_no_unknown_flag():
+    sub = {"reframe": {"selftest": "x", "reality": "y", "expectation": "z"},
+           "commit": "abc123", "bug_class": "feature_request",
+           "repro": {"steps": []}}
+    result = validate(sub)
+    assert "unknown_bug_class" not in result["reasons"]
+
+
 def test_repro_class_mapping():
     assert repro_class("xss") == "A"
     assert repro_class("race_condition") == "B"

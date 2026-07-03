@@ -39,6 +39,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 
 try:
     import yaml
@@ -305,8 +306,28 @@ def _proof_fields(facts):
 
 
 # ---------------------------------------------------------------- main
+def _validate_github_url(url):
+    """Nur https://github.com/... zulassen. Sonst ablehnen (RCE-Schutz)."""
+    if url.startswith("-"):
+        raise ValueError("ungueltige Quelle (fuehrendes '-'): %r" % url)
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("nur https-URLs erlaubt: %r" % url)
+    host = (parsed.hostname or "").lower()
+    if host != "github.com" and not host.endswith(".github.com"):
+        raise ValueError("nur github.com-URLs erlaubt: %r" % url)
+    return parsed
+
+
 def resolve_source(src):
-    """Lokaler Pfad -> direkt. org/repo oder URL -> shallow clone in tmp."""
+    """Lokaler Pfad -> direkt. org/repo oder github-https-URL -> shallow clone.
+
+    Scheme-Whitelist gegen git-Transport-RCE (ext::, file::, ssh://, git://):
+    erlaubt sind nur existierende lokale Pfade, `org/repo` und
+    https://github.com-URLs. Alles andere wird abgelehnt.
+    """
+    if src.startswith("-"):
+        raise ValueError("ungueltige Quelle (fuehrendes '-'): %r" % src)
     if os.path.isdir(src):
         commit = _git_head(src)
         return src, commit, None
@@ -314,12 +335,15 @@ def resolve_source(src):
         url = "https://github.com/%s.git" % src
         pid = src
     else:
+        _validate_github_url(src)
         url = src if src.endswith(".git") else src + ".git"
         m = re.search(r"github\.com[:/]+([\w.-]+/[\w.-]+?)(?:\.git)?$", src)
         pid = m.group(1) if m else "unknown/repo"
+    _validate_github_url(url)
     tmp = tempfile.mkdtemp(prefix="bhb-scan-")
     subprocess.run(
-        ["git", "clone", "--depth", "1", url, tmp],
+        ["git", "-c", "protocol.ext.allow=never",
+         "-c", "protocol.allow=user", "clone", "--depth", "1", url, tmp],
         check=True, capture_output=True, text=True, timeout=120
     )
     return tmp, _git_head(tmp), pid

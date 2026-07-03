@@ -8,6 +8,8 @@ SANDBOX_SUBNET=$(docker network inspect "$NET" \
   -f '{{ (index .IPAM.Config 0).Subnet }}')
 
 echo "sandbox subnet: $SANDBOX_SUBNET"
+# Eine interface-unabhaengige Regel genuegt: alles aus dem Sandbox-Subnetz,
+# das nicht ins Sandbox-Subnetz geht, wird verworfen (F-012: hartkodierte
+# eth0-Zusatzregel entfernt, war redundant und interface-abhaengig).
 iptables -I DOCKER-USER -s "$SANDBOX_SUBNET" ! -d "$SANDBOX_SUBNET" -j DROP
-iptables -I DOCKER-USER -s "$SANDBOX_SUBNET" -o eth0 -j DROP
 echo "egress-block aktiv. Persistieren via iptables-save."

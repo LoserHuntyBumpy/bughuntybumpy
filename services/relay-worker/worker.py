@@ -23,6 +23,7 @@ Issues bleiben, BHB priorisiert per Label.
 """
 import json
 import os
+from contextlib import closing
 
 import psycopg2
 import redis
@@ -31,7 +32,11 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
 GITHUB_APP_ID = os.getenv("GITHUB_APP_ID", "000000")
 NOTIFY = "queue:verdicts"
+PROCESSING = "queue:verdicts:processing"
+DEAD = "queue:verdicts:dead"
 
+# V2/V3 reserviert (Phase-2 Tier-B): Runner emittiert real nur V1/REJECTED.
+# Label-Eintraege bleiben vorhanden, Tier-B-Logik noch nicht aktiv.
 LABEL = {"V1": "bhb-verified", "V2": "bhb-stochastic",
          "V3": "bhb-community", "REJECTED": "bhb-rejected"}
 
@@ -43,7 +48,7 @@ def db():
 
 
 def report_meta(report_id):
-    with db() as conn, conn.cursor() as cur:
+    with closing(db()) as conn, conn, conn.cursor() as cur:
         cur.execute("SELECT project_id, commit_hash, tone_tag "
                     "FROM reports WHERE id=%s", (report_id,))
         return cur.fetchone()
@@ -71,16 +76,32 @@ def handle(msg):
               flush=True)
 
 
+def reclaim_processing():
+    """Beim Restart: Nachrichten aus PROCESSING zurueck in NOTIFY schieben."""
+    while True:
+        raw = rds.rpoplpush(PROCESSING, NOTIFY)
+        if not raw:
+            break
+        print("reclaimed verdict from processing", flush=True)
+
+
 def main():
+    reclaim_processing()
     print("relay-worker up, consuming %s" % NOTIFY, flush=True)
     while True:
-        item = rds.blpop(NOTIFY, timeout=5)
-        if not item:
+        raw = rds.blmove(NOTIFY, PROCESSING, timeout=5, src="LEFT",
+                         dest="RIGHT")
+        if not raw:
             continue
         try:
-            handle(json.loads(item[1]))
+            handle(json.loads(raw))
         except Exception as e:  # noqa: BLE001
-            print("relay error: %s" % e, flush=True)
+            # Reliable-Queue (F-007): fehlgeschlagene Nachricht nicht
+            # verlieren, sondern in Dead-Letter schieben (analog Broker).
+            print("relay error (dead-letter): %s" % e, flush=True)
+            rds.rpush(DEAD, raw)
+        finally:
+            rds.lrem(PROCESSING, 0, raw)
 
 
 if __name__ == "__main__":

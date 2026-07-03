@@ -57,7 +57,9 @@ def validate(sub):
 
     steps = sub.get("repro", {}).get("steps", [])
     bug_class = sub.get("bug_class", "")
-    if bug_class in TIER1 | TIER2 and not steps:
+    if bug_class not in TIER1 | TIER2 | TIER3:
+        reasons.append("unknown_bug_class")     # leerer/unbekannter Wert -> reject
+    elif bug_class in TIER1 | TIER2 and not steps:
         reasons.append("repro_steps_required")
 
     tone = _tone(rf)

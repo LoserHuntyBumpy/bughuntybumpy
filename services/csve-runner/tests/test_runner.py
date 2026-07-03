@@ -82,6 +82,55 @@ def test_timeout():
     assert any(step.get("timed_out") for step in data["steps"])
 
 
+def test_max_steps_rejected():
+    big = [{"run": "true", "expect_exit": 0} for _ in range(200)]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        yaml.safe_dump({"commit": "abc", "steps": big}, f)
+        path = f.name
+    rc, out = cap_main(path)
+    os.unlink(path)
+    data = json.loads(out.strip().splitlines()[-1])
+    assert rc == 1
+    assert data["verdict"] == "REJECTED"
+    assert data["verdict_class"] == "none"
+    assert data["error"] == "max_steps"
+    assert data["steps"] == []
+    assert data["step_count"] == 200
+
+
+def test_timebox_exceeded():
+    # Ein Step ueber Timebox -> Abbruch <= Timebox+Slack, error=timebox_exceeded
+    os.environ["REALTIME_TIMEBOX_SEC"] = "1"
+    import importlib
+    import runner as runner_mod
+    importlib.reload(runner_mod)
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.safe_dump({"commit": "abc", "steps": [
+                {"run": "sleep 2", "expect_exit": 0},
+                {"run": "echo never", "expect_exit": 0},
+            ]}, f)
+            path = f.name
+        import io
+        old = sys.stdout
+        sys.stdout = io.StringIO()
+        t0 = __import__("time").time()
+        try:
+            rc = runner_mod.main(path)
+        finally:
+            out = sys.stdout.getvalue()
+            sys.stdout = old
+        elapsed = __import__("time").time() - t0
+        os.unlink(path)
+        data = json.loads(out.strip().splitlines()[-1])
+        assert data["verdict"] == "REJECTED"
+        assert data["error"] == "timebox_exceeded"
+        assert elapsed <= 1 + 5  # Timebox + Slack
+    finally:
+        del os.environ["REALTIME_TIMEBOX_SEC"]
+        importlib.reload(runner_mod)
+
+
 def test_step_parse_deterministic():
     # Shell-Metazeichen duerfen bei shell=False keinen Exit-Code-Trick erzeugen
     r = run_step("false; true", expect_exit=0)

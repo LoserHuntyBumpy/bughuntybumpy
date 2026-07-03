@@ -8,4 +8,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY broker.py runner_driver.py docker_driver.py vm_driver.py .
+# Non-root (F-002): Prozess laeuft als broker-User mit der GID der
+# Host-Docker-Socket-Gruppe (Build-Arg), Socket-Zugriff ohne root-uid.
+# Existiert die GID im Image bereits (z. B. 0 bei Docker Desktop),
+# wird sie wiederverwendet statt neu angelegt.
+ARG DOCKER_GID=999
+RUN getent group "${DOCKER_GID}" >/dev/null || groupadd -g "${DOCKER_GID}" docker
+RUN useradd -r -g "${DOCKER_GID}" -d /app broker
+USER broker
 CMD ["python", "broker.py"]

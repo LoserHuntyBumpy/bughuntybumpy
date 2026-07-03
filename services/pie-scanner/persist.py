@@ -24,8 +24,9 @@ import yaml
 try:
     import psycopg2
 except ImportError:
+    # Exit != 0 (F-013): entrypoint.sh erkennt Skip nur am Exit-Code.
     sys.stderr.write("psycopg2 fehlt\n")
-    sys.exit(0)
+    sys.exit(1)
 
 
 def main(path):

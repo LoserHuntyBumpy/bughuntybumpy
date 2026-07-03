@@ -1,10 +1,10 @@
 # BugHuntyBumpy
 
-Created: 2026-06-14 | Updated: 2026-06-14
+Created: 2026-06-14 | Updated: 2026-07-03
 Language: English (translation) | [Deutsche Version](README.md) (original)
 
 > Translation sync: this English version reflects the German [README.md](README.md)
-> at state **2026-06-14**. If the German "Stand" date above is newer than this
+> at state **2026-07-03**. If the German "Stand" date above is newer than this
 > file's "Updated" date, this translation is outdated and the German original
 > takes precedence.
 
@@ -41,7 +41,7 @@ Layer 5  Relay  relay-worker: verdict -> GitHub label (bhb-verified, ...)
 ```
 
 Network separation: frontend (traefik) / backend (internal) / sandbox (internal,
-no egress) / honeypot-net (mock services).
+no egress). Additionally, one ephemeral internal network `bhb-job-<id>` per job.
 
 ---
 
@@ -148,7 +148,7 @@ BugHuntyBumpy/
 |   |-- ansible/site.yml            # service deploy (systemd + venv)
 |   |-- scripts/                    # build/provision/destroy/runner-lifecycle
 |   `-- IMAGES.lock                 # image hashes (env_hash contract)
-`-- BugFixPlan_2026-06-09.md        # archived planning
+`-- FixPlan_2026-06-25.md           # archived planning
 ```
 
 ---
@@ -171,8 +171,9 @@ See `BLUEPRINT_Docker-Infrastruktur.md` section 12 for the full checklist.
 $ python -m pytest services/*/tests/ -v
 ```
 
-Current state: 29 passed (casg-api, pie-scanner, csve-broker incl.
-docker_driver + vm_driver). Runner tests require a Linux shell.
+Current state: 51 passed (casg-api incl. throttle, pie-scanner, csve-broker
+incl. docker_driver + vm_driver). Runner tests require a Linux shell
+(module skip on win32).
 
 ---
 

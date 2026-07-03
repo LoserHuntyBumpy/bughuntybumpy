@@ -1,7 +1,7 @@
 name: bughuntybumpy
 
 # MVP-Grundgerüst (Blueprint v1.0 §10). csve-broker als Python-Worker
-# statt Go (MVP-Reduktion, dokumentiert in README). cert-signer/honeypot
+# statt Go (MVP-Reduktion, dokumentiert in README). cert-signer
 # via profile "full" optional.
 
 x-logging: &default-logging
@@ -19,9 +19,6 @@ networks:
   sandbox:
     driver: bridge
     internal: true
-  honeypot-net:
-    driver: bridge
-    internal: true
 
 volumes:
   pg-data:
@@ -33,17 +30,33 @@ services:
 
   # ---------- Ingress ----------
   traefik:
-    image: traefik:v3.2
+    # v3.6: aelteste 3.x, deren Docker-Client Engine 29/API 1.54 lesen kann
+    # (v3.2-v3.5: 400 auf /info, Provider tot -> D-002).
+    image: traefik:v3.6
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      # Backends haengen in frontend+backend: ohne Pinning waehlt der
+      # Provider ggf. die backend-IP (fuer traefik unerreichbar -> 504).
+      - "--providers.docker.network=bughuntybumpy_frontend"
       - "--entrypoints.web.address=:80"
-      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--entrypoints.traefik.address=:8080"
     ports:
-      - "6080:80"      # Ingress (web) -> http://localhost:6080/
-      - "6088:8080"    # Traefik-Dashboard/API
+      - "6080:80"             # Ingress (web) -> http://localhost:6080/
+      - "127.0.0.1:6088:8080" # Traefik-Dashboard/API (nur loopback)
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    labels:
+      - "traefik.enable=true"
+      # Dashboard/API hinter BasicAuth (api@internal), nur ueber traefik-Entrypoint.
+      - "traefik.http.routers.dashboard.rule=PathPrefix(`/api`) || PathPrefix(`/dashboard`)"
+      - "traefik.http.routers.dashboard.entrypoints=traefik"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      # User:Hash aus ${TRAEFIK_DASHBOARD_AUTH} (htpasswd, $ als $$ escapen).
+      # Kein Default-Credential: leer/unset -> Start verweigert (F-003).
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH:?TRAEFIK_DASHBOARD_AUTH fehlt - deploy/01_bootstrap.sh ausfuehren oder htpasswd-Hash setzen}"
     networks: [frontend]
     restart: unless-stopped
     logging: *default-logging
@@ -78,8 +91,21 @@ services:
       - "traefik.http.routers.pie.rule=PathPrefix(`/`)"
       - "traefik.http.routers.pie.entrypoints=web"
       - "traefik.http.routers.pie.priority=1"
+      - "traefik.http.routers.pie.middlewares=bhb-ratelimit,bhb-bodylimit"
       - "traefik.http.services.pie.loadbalancer.server.port=8000"
-    depends_on: [casg-api]
+      # Shared Middlewares (auch von casgapi-Router referenziert).
+      - "traefik.http.middlewares.bhb-ratelimit.ratelimit.average=30"
+      - "traefik.http.middlewares.bhb-ratelimit.ratelimit.burst=15"
+      - "traefik.http.middlewares.bhb-bodylimit.buffering.maxRequestBodyBytes=1048576"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      casg-api:
+        condition: service_healthy
     restart: unless-stopped
     logging: *default-logging
 
@@ -95,7 +121,14 @@ services:
       - "traefik.http.routers.casgapi.rule=PathPrefix(`/api`)"
       - "traefik.http.routers.casgapi.entrypoints=web"
       - "traefik.http.routers.casgapi.priority=100"
+      - "traefik.http.routers.casgapi.middlewares=bhb-ratelimit,bhb-bodylimit"
       - "traefik.http.services.casgapi.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,17 +139,27 @@ services:
 
   # ---------- Layer 3: CSVE ----------
   csve-broker:
-    build: ./services/csve-broker
+    build:
+      context: ./services/csve-broker
+      args:
+        # GID der Host-Docker-Gruppe (Socket-Zugriff fuer non-root broker-User).
+        DOCKER_GID: ${DOCKER_GID:-999}
     networks: [backend]
+    security_opt:
+      - "no-new-privileges:true"
     environment:
       - DATABASE_URL=postgresql://bhb:${PG_PASSWORD}@postgres:5432/bhb
       - REDIS_URL=redis://redis:6379/0
       - RUNNER_IMAGE=bhb/csve-runner:latest
       - STEP_TIMEOUT_SEC=${STEP_TIMEOUT_SEC:-120}
+      - MAX_STEPS=${MAX_STEPS:-50}
       - REALTIME_TIMEBOX_SEC=${REALTIME_TIMEBOX_SEC:-600}
+      - SECCOMP_PROFILE=/etc/bhb/seccomp.json
     volumes:
       # Broker provisioniert ephemere Runner -> braucht Docker-Socket.
       - "/var/run/docker.sock:/var/run/docker.sock"
+      # seccomp-Profil fuer ephemere Runner (Broker liest zur Laufzeit).
+      - "./services/csve-runner/seccomp.json:/etc/bhb/seccomp.json:ro"
     depends_on:
       postgres:
         condition: service_healthy
@@ -128,7 +171,7 @@ services:
   csve-runner:
     build: ./services/csve-runner
     image: bhb/csve-runner:latest
-    networks: [sandbox, honeypot-net]
+    networks: [sandbox]
     read_only: true
     security_opt:
       - "no-new-privileges:true"

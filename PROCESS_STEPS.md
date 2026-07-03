@@ -150,3 +150,124 @@ Code-Generierung lokal (CLAUDE.md §5.8: Quellcode bleibt Claude).
 - [x] Gesamttest
       path:   claude:pytest
       result: casg-api+pie-scanner+csve-broker 29 passed. Akzeptanz 5+6 verifiziert; 1-4 brauchen Hyper-V/Packer/TF-Toolchain (Phase 0)
+
+---
+
+## FixPlan-Umsetzung (FixPlan_2026-06-25, 3 Opus-Agents parallel)
+
+Orchestrator verteilt disjunkte Datei-Ownership, Reviewer-Sign-off zentral.
+Agent A: casg-api/pie-web/compose. Agent B: broker/driver/relay. Agent C: runner/scanner.
+
+- [x] F1 DB-Connection-Leak (P0)
+      path:   claude:agentA+agentB
+      result: closing(db()) in app.py/broker.py/worker.py. psycopg2-conn schliesst jetzt
+- [x] F2 seccomp-Profil angewandt (P1)
+      path:   claude:agentA+agentB
+      result: driver liest SECCOMP_PROFILE inline-JSON -> security_opt. compose bind+env. graceful skip
+- [x] F4 Runner Wall-Clock + Step-Cap (P1)
+      path:   claude:agentB+agentC
+      result: runner MAX_STEPS=50 + timebox-guard. driver container.kill() nach wait-timeout
+- [x] F3 Auth/Rate-Limit (P1)
+      path:   claude:agentA
+      result: throttle.py redis-quota 30/min/IP -> 429. traefik ratelimit+bodylimit 1MB
+- [x] F5 git-clone ext::-RCE Scanner (P2)
+      path:   claude:agentC
+      result: scheme-whitelist, ext/file/git/ssh+leading-dash reject, protocol.ext.allow=never
+- [x] F7 Health 503 + healthcheck (P2)
+      path:   claude:agentA
+      result: casg-api 503 bei Fehler. compose healthcheck casg/pie, depends_on service_healthy
+- [x] F6 traefik-Dashboard schliessen (P2)
+      path:   claude:agentA
+      result: api.insecure raus, 127.0.0.1:6088 loopback, BasicAuth dashboard-auth
+- [x] F8 Runner-Netz-Isolation (P2)
+      path:   claude:agentB
+      result: ephemeres internes bhb-job-<id> pro Job, finally net.remove. SANDBOX/HONEYPOT-Konst entfernt
+- [x] F9 unknown bug_class -> reject (P3)
+      path:   claude:agentA
+      result: validate -> unknown_bug_class bei nicht-TIER1|2|3 (inkl. leer)
+- [x] F11 File-Handle-Leak Runner (P3)
+      path:   claude:agentC
+      result: with open(repro_path,"rb") fuer repro_hash
+- [x] F10 Malformed-Job Dead-Letter (P3)
+      path:   claude:agentB
+      result: queue:realtime:dead rpush bei Exception vor lrem, log mit report_id
+- [x] F12 tote V2/V3-Mappings (P3)
+      path:   claude:agentB
+      result: Phase-2-reserviert kommentiert (broker severity_for, relay LABEL), Verhalten gleich
+- [x] Reviewer-Sign-off + Gesamttest
+      path:   claude:orchestrator-review
+      result: 48 tests passed (13+23+12), runner sh-verifiziert, compose config -q OK
+
+---
+
+## Audit-Fix-Umsetzung (AUDIT_2026-07-03, F-001..F-013)
+
+- [x] F-001 casg-api Dockerfile kopiert throttle.py
+      path:   claude:dockerfile-fix
+      result: COPY um throttle.py ergaenzt. Image gebaut, Container healthy, import throttle im Image OK
+- [x] F-002 csve-broker Hardening (no-new-privileges, non-root USER)
+      path:   claude:hardening
+      result: USER broker (GID via DOCKER_GID-Build-Arg, existierende GID wiederverwendet), compose security_opt. Socket-Ping non-root OK, Spawn-Verhalten identisch root/non-root
+- [x] F-003 Traefik-Dashboard Default-Hash entfernen + Bootstrap-Generierung
+      path:   claude:secret-hygiene
+      result: compose :?-Interpolation verweigert Start bei leer/unset. Bootstrap generiert apr1-Hash (fehlender Key wird ergaenzt). Verifiziert beide Pfade
+- [x] F-004 .gitignore !INFRA.md entfernen (INFRA bleibt lokal)
+      path:   claude:gitignore-fix
+      result: !INFRA.md raus + git rm --cached (war getrackt). check-ignore matcht *.md. Historie auf GitHub behaelt alte Version
+- [x] F-005 .gitignore vm/scripts/*.ps1 ausnehmen
+      path:   claude:gitignore-fix
+      result: !vm/scripts/*.ps1. runner_spawn.ps1 nicht mehr ignoriert, git_push.ps1 bleibt ignoriert
+- [x] F-006 MAX_STEPS/REALTIME_TIMEBOX_SEC an Runner durchreichen
+      path:   claude:config-plumbing
+      result: driver environment + compose MAX_STEPS. Neuer Unit-Test test_spawn_passes_step_caps_env gruen
+- [x] F-007 relay-worker Reliable-Queue (BLMOVE + dead-letter)
+      path:   claude:reliability
+      result: BLMOVE->processing, LREM nach Erfolg, dead-letter queue:verdicts:dead, reclaim beim Start. Muster 1:1 aus broker.py
+- [x] F-008 README/README_EN Stand/Testzahl/FixPlan-Verweis
+      path:   claude:doku-sync
+      result: Stand/Updated 2026-07-03, 49 passed, FixPlan_2026-06-25.md. DE+EN synchron
+- [x] F-009 INFRA.md Ansible-Pfad + *_token.json in .gitignore
+      path:   claude:doku-fix
+      result: vm/ansible/site.yml korrigiert, *_token.json ignoriert -> INFRA-Aussage jetzt wahr
+- [x] F-010 throttle fail-open als Policy dokumentieren
+      path:   claude:policy-decision
+      result: fail-open bewusst belassen, traefik-Ratelimit erste Linie. Docstring + INFRA dokumentiert, Verhalten unveraendert
+- [x] F-011 honeypot-net entfernen (compose + Doku)
+      path:   claude:dead-config-cleanup
+      result: Netz + Runner-Referenz raus, README/README_EN/INFRA bereinigt (ephemeres bhb-job-Netz dokumentiert)
+- [x] F-012 host-firewall.sh redundante eth0-Regel entfernen
+      path:   claude:shell-fix
+      result: interface-unabhaengige Subnetz-Regel bleibt, eth0-Regel entfernt. bash -n OK
+- [x] F-013 persist.py Exit 1 bei fehlendem psycopg2
+      path:   claude:exit-code-fix
+      result: sys.exit(1). Ohne psycopg2 verifiziert Exit 1, entrypoint loggt Skip
+- [x] Globale Verify-Gates + Doku-Trias
+      path:   claude:verify+doku
+      result: pytest 49 passed 1 skipped, compose config -q OK, py_compile OK, bash -n OK. CHANGELOG 0.6.0, README/README_EN/INFRA aktualisiert. Vorbestehend offen: Broker-Workdir-Mount (Spawn->no_verdict_in_logs, separater Task), traefik-Docker-Provider-Fehler Host (BUG-1-Muster)
+
+## D-Fix-Umsetzung (2026-07-03, D-001/D-002 aus 0.6.0-Verifikation)
+
+- [x] D-001 Fix: repro.yml via benanntes Job-Volume statt Bind-Mount
+      path:   claude:runtime-fix
+      result: docker_driver: Volume bhb-job-<id> + put_archive auf nicht gestartetem Hilfscontainer (Runner-Image), Runner mountet ro. ENV-Weg verworfen (128KB-Limit pro Env-String vs 1MB Bodylimit), Shared-Volume verworfen (Job-Isolation). finally raeumt Volume+Netz+Container
+- [x] D-001 Tests angepasst
+      path:   claude:test-update
+      result: neue Tests Volume-Transfer + repro-tar + Volume-Cleanup-on-error; Netz/seccomp/Env/Kill-Assertions erhalten. Frischer Client-Mock pro Test (Call-Akkumulation ueber Modul-Mock behoben). 26 passed
+- [x] D-001 Live-Verify im Compose-Stack
+      path:   claude:verify
+      result: spawn expect_exit:0 -> V1, expect_exit:1 -> REJECTED. Keine bhb-job-Volumes/Netze uebrig
+- [x] D-002 Diagnose Schritt 1+2: Engine-Version + Socket-Antwort
+      path:   claude:diagnose
+      result: Engine 29.5.3 API 1.54 (min 1.40). Socket aus alpine-Container antwortet -> Daemon-Zugriff intakt, Fehler liegt im traefik-Docker-Client
+- [x] D-002 Diagnose Schritt 3: traefik-Versionstest v3.2-v3.6
+      path:   claude:diagnose
+      result: v3.2-v3.4 leere Daemon-Fehlermeldung, v3.5 explizit "400 Bad Request no error-message" auf /info, v3.6 liest Provider. Minimal-Bump = v3.6, kein Dateiprovider-Fallback noetig
+- [x] D-002 Fix: compose traefik v3.2 -> v3.6 + Provider-Netz-Pinning
+      path:   claude:config-fix
+      result: v3.6 behebt Daemon-Read; danach 504 weil Provider backend-IP der Multi-Netz-Container waehlte -> providers.docker.network=bughuntybumpy_frontend. health 200, / 200 (nach Beispiel-Spec), Dashboard ohne Auth 401
+- [x] Globale Verify-Gates
+      path:   claude:verify
+      result: compose config -q Exit 0. pytest 51 passed 1 skipped. py_compile OK. E2E: Submit via :6080/api/submit -> Broker V1, verdicts-Tabelle 1 Zeile, relay-worker loggt bhb-verified. Keine Job-Reste
+- [x] Doku-Trias
+      path:   claude:doku
+      result: CHANGELOG 0.6.1, INFRA traefik-Zeile + Volume-Uebergabeweg, README/README_EN Testzahl 51 synchron
